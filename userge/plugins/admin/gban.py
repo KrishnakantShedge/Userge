@@ -8,6 +8,7 @@
 #
 # All rights reserved
 
+import json
 import asyncio
 from typing import Union
 
@@ -271,9 +272,6 @@ async def gban_at_entry(message: Message):
                 chat_ids.append(chat_id)
             else:
                 chat_ids = [chat_id]
-            await GBAN_USER_BASE.update_one(
-                {'user_id': user_id, 'firstname': first_name},
-                {"$set": {'chat_ids': chat_ids}}, upsert=True)
             await asyncio.gather(
                 message.client.kick_chat_member(chat_id, user_id),
                 message.reply(
@@ -287,12 +285,15 @@ async def gban_at_entry(message: Message):
                     "\n\n**GBanned User $SPOTTED**\n"
                     f"**User:** [{first_name}](tg://user?id={user_id})\n"
                     f"**ID:** `{user_id}`\n**Reason:** {gbanned['reason']}\n**Quick Action:** "
-                    f"Banned in {message.chat.title}")
+                    f"Banned in {message.chat.title}"),
+                GBAN_USER_BASE.update_one(
+                    {'user_id': user_id, 'firstname': first_name},
+                    {"$set": {'chat_ids': chat_ids}}, upsert=True)
             )
         elif Config.ANTISPAM_SENTRY:
             async with aiohttp.ClientSession() as ses:
                 async with ses.get(f'https://api.cas.chat/check?user_id={user_id}') as resp:
-                    res = await resp.json()
+                    res = json.loads(await resp.text())
             if res['ok']:
                 reason = ' | '.join(res['result']['messages']) if 'result' in res else None
                 await asyncio.gather(
