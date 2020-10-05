@@ -17,10 +17,9 @@ from traceback import format_exc
 from functools import partial
 from typing import List, Dict, Union, Any, Callable, Optional
 
-from pyrogram import (
-    Message as RawMessage, Filters,
-    StopPropagation, ContinuePropagation)
-from pyrogram.client.types import ChatMember
+from pyrogram import StopPropagation, ContinuePropagation
+from pyrogram.filters import Filter as RawFilter
+from pyrogram.types import Message as RawMessage, ChatMember
 from pyrogram.errors.exceptions.bad_request_400 import ChatAdminRequired, PeerIdInvalid
 
 from userge import logging, Config
@@ -84,8 +83,13 @@ def _clear_cht() -> None:
     _TASK_1_START_TO = time.time()
 
 
-async def _init(r_c: Union['_client.Userge', '_client._UsergeBot']) -> None:
+async def _init(r_c: Union['_client.Userge', '_client._UsergeBot'],
+                r_m: RawMessage) -> None:
     global _U_ID, _B_ID  # pylint: disable=global-statement
+    if r_m.from_user and (r_m.from_user.is_self
+                          or (r_m.from_user.id in Config.SUDO_USERS)
+                          or (r_m.from_user.id == Config.OWNER_ID)):
+        RawClient.LAST_OUTGOING_TIME = time.time()
     if _U_ID and _B_ID:
         return
     if isinstance(r_c, _client.Userge):
@@ -208,7 +212,7 @@ class RawDecorator(RawClient):
         self._tasks: List[Callable[[Any], Any]] = []
         super().__init__(**kwargs)
 
-    def on_filters(self, filters: Filters, group: int = 0,
+    def on_filters(self, filters: RawFilter, group: int = 0,
                    **kwargs: Union[bool]) -> 'RawDecorator._PYRORETTYPE':
         """ abstract on filter method """
 
@@ -218,7 +222,7 @@ class RawDecorator(RawClient):
         def decorator(func: _PYROFUNC) -> _PYROFUNC:
             async def template(r_c: Union['_client.Userge', '_client._UsergeBot'],
                                r_m: RawMessage) -> None:
-                await _init(r_c)
+                await _init(r_c, r_m)
                 _raise = partial(_raise_func, r_c, r_m.chat.id, r_m.message_id)
                 if r_m.chat and r_m.chat.type not in flt.scope:
                     if isinstance(flt, types.raw.Command):
